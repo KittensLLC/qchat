@@ -3,6 +3,7 @@ import { SmartToolContainer } from "@/features/database/cosmos-containers"
 import { SmartToolEntity, TenantEntity } from "@/features/database/entities"
 import { SmartToolModel } from "@/features/models/smart-tool-models"
 import { TenantSmartToolConfig } from "@/features/models/tenant-models"
+import { UserSmartToolConfig } from "@/features/models/user-models"
 
 export const GetPublicSmartTools = async (): ServerActionResponseAsync<SmartToolModel[]> => {
   try {
@@ -115,6 +116,26 @@ export const GetTenantSmartTools = async (
       return acc
     }, [] as TenantSmartToolConfig[])
     return { status: "OK", response: smartTools }
+  } catch (error) {
+    return { status: "ERROR", errors: [{ message: `${error}` }] }
+  }
+}
+
+export const GetUserSmartTools = async (
+  tenantSmartTools: TenantEntity["smartTools"],
+  userGroups: string[]
+): ServerActionResponseAsync<UserSmartToolConfig[]> => {
+  try {
+    const tenantToolsResult = await GetTenantSmartTools(tenantSmartTools)
+    if (tenantToolsResult.status !== "OK") throw tenantToolsResult
+    const userTools = tenantToolsResult.response
+      .filter(tst => tst.enabled && (!tst.accessGroups.length || tst.accessGroups.some(ag => userGroups.includes(ag))))
+      .map<UserSmartToolConfig>(tst => ({
+        id: tst.smartToolId,
+        name: tst.name,
+        template: tst.template,
+      }))
+    return { status: "OK", response: userTools }
   } catch (error) {
     return { status: "ERROR", errors: [{ message: `${error}` }] }
   }

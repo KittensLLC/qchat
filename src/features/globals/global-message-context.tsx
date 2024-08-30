@@ -3,13 +3,13 @@ import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { createContext, useContext, useEffect } from "react"
 
-import AgreeTermsAndConditions from "@/components/announcement/agree-terms-and-conditions"
-import WhatsNewModal from "@/components/announcement/whats-new-modal"
-
 import { toast } from "@/features/ui/use-toast"
 
 import { announcement } from "./announcements"
 import { useApplication } from "./application-provider"
+
+import AgreeTermsAndConditions from "@/components/announcement/agree-terms-and-conditions"
+import WhatsNewModal from "@/components/announcement/whats-new-modal"
 
 interface GlobalMessageProps {
   showError: (error: string, reload?: () => void) => void

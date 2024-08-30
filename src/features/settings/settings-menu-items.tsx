@@ -8,6 +8,7 @@ import {
   DraftingCompass,
   Library,
   BookMarked,
+  LayoutGrid,
 } from "lucide-react"
 
 import { isTenantAdmin, isAdmin } from "@/features/auth/helpers"
@@ -28,6 +29,7 @@ const menuItems = [
       { url: "/smart-tools", icon: <DraftingCompass size={16} />, text: "Smart Tools", adminRequired: true },
       { url: "/features", icon: <Library size={16} />, text: "Features", adminRequired: true },
       { url: "/indexes", icon: <BookMarked size={16} />, text: "Indexes", adminRequired: true },
+      { url: "/application", icon: <LayoutGrid size={16} />, text: "Application", adminRequired: true },
     ],
   },
 ]

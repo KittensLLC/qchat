@@ -1,14 +1,12 @@
 import { FC } from "react"
 
-import Typography from "@/components/typography"
-
 import { CitationSlider } from "./citation-slider"
+
+import Typography from "@/components/typography"
 
 interface Citation {
   name: string
   id: string
-  tenantId: string
-  userId: string
   chatThreadId: string
   order: number
 }
@@ -46,8 +44,6 @@ export const Citation: FC<Props> = (props: Props) => {
                       index={index + 1}
                       name={item.name}
                       id={item.id}
-                      tenantId={item.tenantId}
-                      userId={item.userId}
                       order={item.order}
                       chatThreadId={item.chatThreadId}
                     />

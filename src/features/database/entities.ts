@@ -11,11 +11,11 @@ export interface ApplicationEntity extends Entity {
   version: string
   termsAndConditionsDate: string
   /** @deprecated */
-  administratorAccess: TenantGroupPairs[]
+  administratorAccess?: TenantGroupPairs[]
   /** @deprecated */
-  transcriptionAccess: TenantGroupPairs[]
+  transcriptionAccess?: TenantGroupPairs[]
   /** @deprecated */
-  indexes: IndexEntity[]
+  indexes?: IndexEntity[]
 }
 
 /** @deprecated */

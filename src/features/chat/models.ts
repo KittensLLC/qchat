@@ -57,14 +57,11 @@ export interface ChatMessageModel {
   type: ChatRecordType.Message
   role: ChatRole
   fleschKincaidScore?: number
-  // name: string
 }
 export interface UserChatMessageModel extends ChatMessageModel {
   role: ChatRole.User
   context: string
-  systemPrompt: string
-  tenantPrompt: string
-  userPrompt: string
+  systemPrompt: string | { text: string; type: "text" }[]
   contentFilterResult?: unknown
 }
 export interface AssistantChatMessageModel extends ChatMessageModel {
@@ -89,13 +86,13 @@ export interface ChatThreadModel {
   isDeleted: boolean
   chatType: ChatType
   conversationSensitivity: ConversationSensitivity
+  indexId: string
   conversationStyle: ConversationStyle
   chatOverFileName: string
   type: ChatRecordType.Thread
   internalReference?: string
   isDisabled: boolean
   contentFilterTriggerCount?: number
-  evaluationMetrics?: EvaluationMetrics
 }
 
 export interface EvaluationMetrics {
@@ -114,6 +111,7 @@ export interface PromptBody {
   chatType: ChatType
   conversationStyle: ConversationStyle
   conversationSensitivity: ConversationSensitivity
+  indexId: string
   chatOverFileName: string
   tenantId: string
   userId: string
@@ -167,6 +165,7 @@ export interface ChatDocumentModel {
   tenantId: string
   isDeleted: boolean
   createdAt: Date
+  indexId: string
   contents?: string
   extraContents?: string
   updatedContents?: string

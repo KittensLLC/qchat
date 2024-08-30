@@ -110,3 +110,5 @@ const getRewriterAction = (score: number, contentFilter: boolean): SupportedSmar
   if (score <= 8) return "formatToImprove"
   return "formatToImprove"
 }
+
+//TODO: Investigate serialization of the function calls in this use client file

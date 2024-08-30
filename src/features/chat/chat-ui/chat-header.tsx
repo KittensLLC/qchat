@@ -1,16 +1,16 @@
 import { FC } from "react"
 
-import Typography from "@/components/typography"
-
 import { useChatContext } from "./chat-context"
 import { ChatFilesDisplay } from "./chat-file/chat-file-list"
 import { ChatSelectedOptions } from "./chat-header-display/chat-selected-options"
+
+import Typography from "@/components/typography"
 
 interface Prop {}
 
 export const ChatHeader: FC<Prop> = () => {
   const { chatBody, tenantPreferences } = useChatContext()
-  const files = chatBody.chatOverFileName.split(", ")
+  const files = chatBody.chatOverFileName ? chatBody.chatOverFileName.split(", ") : []
   const customRef = tenantPreferences?.customReferenceFields?.find(c => c.name === "internalReference")
 
   return (

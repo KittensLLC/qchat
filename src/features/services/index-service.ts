@@ -3,6 +3,7 @@ import { IndexContainer } from "@/features/database/cosmos-containers"
 import { IndexEntity, TenantEntity } from "@/features/database/entities"
 import { IndexModel } from "@/features/models/index-models"
 import { TenantIndexConfig } from "@/features/models/tenant-models"
+import { UserIndexConfig } from "@/features/models/user-models"
 
 export const GetPublicIndexes = async (): ServerActionResponseAsync<IndexModel[]> => {
   try {
@@ -12,7 +13,7 @@ export const GetPublicIndexes = async (): ServerActionResponseAsync<IndexModel[]
       .fetchAll()
     return {
       status: "OK",
-      response: resources.length ? resources.map(publicIndexMapper) : [],
+      response: resources.length ? resources.map(mapToIndexModel) : [],
     }
   } catch (error) {
     return {
@@ -29,7 +30,7 @@ export const GetIndexes = async (): ServerActionResponseAsync<IndexModel[]> => {
       .fetchAll()
     return {
       status: "OK",
-      response: resources.length ? resources.map(publicIndexMapper) : [],
+      response: resources.length ? resources.map(mapToIndexModel) : [],
     }
   } catch (error) {
     return {
@@ -38,8 +39,23 @@ export const GetIndexes = async (): ServerActionResponseAsync<IndexModel[]> => {
     }
   }
 }
+export const GetIndexById = async (indexId: string): ServerActionResponseAsync<IndexModel> => {
+  try {
+    const container = await IndexContainer()
+    const { resources } = await container.items
+      .query<IndexEntity>({
+        query: "SELECT * FROM c WHERE c.indexId = @indexId AND c.enabled = true",
+        parameters: [{ name: "@indexId", value: indexId }],
+      })
+      .fetchAll()
+    if (!resources.length) throw new Error(`Index not found with id: ${indexId}`)
+    return { status: "OK", response: mapToIndexModel(resources[0]) }
+  } catch (error) {
+    return { status: "ERROR", errors: [{ message: `${error}` }] }
+  }
+}
 
-const publicIndexMapper = (resource: IndexEntity): IndexModel => ({
+const mapToIndexModel = (resource: IndexEntity): IndexModel => ({
   id: resource.indexId,
   name: resource.name,
   description: resource.description,
@@ -111,5 +127,25 @@ export const GetTenantIndexes = async (
       status: "ERROR",
       errors: [{ message: `${error}` }],
     }
+  }
+}
+
+export const GetUserIndexes = async (
+  tenantIndexes: TenantEntity["indexes"],
+  userGroups: string[]
+): ServerActionResponseAsync<UserIndexConfig[]> => {
+  try {
+    const tenantIndexesResult = await GetTenantIndexes(tenantIndexes)
+    if (tenantIndexesResult.status !== "OK") throw tenantIndexesResult
+    const userIndexes = tenantIndexesResult.response
+      .filter(ti => ti.enabled && (!ti.accessGroups.length || ti.accessGroups.some(ag => userGroups.includes(ag))))
+      .map<UserIndexConfig>(tst => ({
+        id: tst.indexId,
+        name: tst.name,
+        description: tst.description,
+      }))
+    return { status: "OK", response: userIndexes }
+  } catch (error) {
+    return { status: "ERROR", errors: [{ message: `${error}` }] }
   }
 }

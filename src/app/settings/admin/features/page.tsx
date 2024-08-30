@@ -2,14 +2,14 @@
 
 import { useState } from "react"
 
-import Typography from "@/components/typography"
-
 import { showSuccess, showError } from "@/features/globals/global-message-store"
 import logger from "@/features/insights/app-insights"
 import { FeatureModel } from "@/features/models/feature-models"
 import FeatureForm from "@/features/settings/admin/feature-form"
 import { useFeaturesContext } from "@/features/settings/admin/features-provider"
 import { Button } from "@/features/ui/button"
+
+import Typography from "@/components/typography"
 
 export default function FeaturesPage(): JSX.Element {
   const { features, setFeatures } = useFeaturesContext()
@@ -39,7 +39,7 @@ export default function FeaturesPage(): JSX.Element {
       const result = await fetch(`/api/admin/features/${featureId}`, { method: "DELETE" })
       if (!result.ok) throw new Error(errorMsg)
       showSuccess({ title: "Success", description: "Feature deleted successfully!" })
-      setFeatures(features.filter(t => t.id !== featureId))
+      setFeatures(features.filter(f => f.id !== featureId))
     } catch (error) {
       showError(errorMsg)
       logger.error("Error deleting feature", { error })

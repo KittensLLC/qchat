@@ -1,9 +1,12 @@
 import { OpenAIStream, StreamingTextResponse, JSONValue, StreamData } from "ai"
 import { BadRequestError } from "openai"
-import { ChatCompletionChunk, ChatCompletionMessageParam, Completion } from "openai/resources"
+import {
+  ChatCompletionChunk,
+  ChatCompletionMessageParam,
+  ChatCompletionSystemMessageParam,
+  Completion,
+} from "openai/resources"
 import { Stream } from "openai/streaming"
-
-import { APP_NAME } from "@/app-global"
 
 import {
   AssistantChatMessageModel,
@@ -20,54 +23,29 @@ import { mapOpenAIChatMessages } from "@/features/common/mapping-helper"
 import logger from "@/features/insights/app-insights"
 import { OpenAIInstance } from "@/features/services/open-ai"
 
-import {
-  buildAudioChatMessages,
-  buildDataChatMessages,
-  buildSimpleChatMessages,
-  getContextPrompts,
-} from "./chat-api-helper"
+import { buildMessages } from "./chat-api-helper"
 import { calculateFleschKincaidScore } from "./chat-flesch"
 import { FindTopChatMessagesForCurrentUser, UpsertChatMessage } from "./chat-message-service"
 import { InitThreadSession, UpsertChatThread } from "./chat-thread-service"
 import { translator } from "./chat-translator-service"
 import { UpdateChatThreadIfUncategorised } from "./chat-utility"
 
-const dataChatTypes = ["data", "audio"]
 export const MAX_CONTENT_FILTER_TRIGGER_COUNT_ALLOWED = 3
 
 export const ChatApi = async (props: PromptProps): Promise<Response> => {
   try {
     const threadSession = await InitThreadSession(props)
     if (threadSession.status !== "OK") throw threadSession
-
     const { chatThread } = threadSession.response
     const updatedLastHumanMessage = props.messages[props.messages.length - 1]
+    const { userMessage, metaPrompt, context, shouldTranslate } = await buildMessages(
+      props.chatType,
+      updatedLastHumanMessage,
+      chatThread
+    )
 
-    let userMessage: ChatCompletionMessageParam
-    let metaPrompt: ChatCompletionMessageParam
-    let context: string = ""
-    let shouldTranslate = false
-
-    if (props.chatType === "simple" || !dataChatTypes.includes(props.chatType)) {
-      const res = await buildSimpleChatMessages(updatedLastHumanMessage)
-      userMessage = res.userMessage
-      metaPrompt = res.systemMessage
-      shouldTranslate = true
-    } else if (props.chatType === "audio") {
-      const res = await buildAudioChatMessages(updatedLastHumanMessage, chatThread.chatThreadId)
-      userMessage = res.userMessage
-      metaPrompt = res.systemMessage
-      context = res.context
-    } else {
-      const res = await buildDataChatMessages(updatedLastHumanMessage, chatThread.chatThreadId)
-      userMessage = res.userMessage
-      metaPrompt = res.systemMessage
-      context = res.context
-    }
-
-    if ((chatThread.contentFilterTriggerCount || 0) >= MAX_CONTENT_FILTER_TRIGGER_COUNT_ALLOWED) {
+    if ((chatThread.contentFilterTriggerCount || 0) >= MAX_CONTENT_FILTER_TRIGGER_COUNT_ALLOWED)
       return new Response(JSON.stringify({ error: "This thread is locked" }), { status: 400 })
-    }
 
     const historyResponse = await FindTopChatMessagesForCurrentUser(chatThread.id)
     if (historyResponse.status !== "OK") throw historyResponse
@@ -83,7 +61,6 @@ export const ChatApi = async (props: PromptProps): Promise<Response> => {
       data
     )
 
-    const contextPrompts = await getContextPrompts()
     const chatMessageResponse = await UpsertChatMessage({
       id: updatedLastHumanMessage.id,
       createdAt: new Date(),
@@ -95,12 +72,9 @@ export const ChatApi = async (props: PromptProps): Promise<Response> => {
       userId: chatThread.userId,
       tenantId: chatThread.tenantId,
       context: context,
-      systemPrompt: contextPrompts.metaPrompt,
-      tenantPrompt: contextPrompts.tenantPrompt,
-      userPrompt: contextPrompts.userPrompt,
+      systemPrompt: metaPrompt.content,
       contentFilterResult,
       fleschKincaidScore: calculateFleschKincaidScore(updatedLastHumanMessage.content),
-      // name: chatThread.useName,
     })
     if (chatMessageResponse.status !== "OK") throw chatMessageResponse
 
@@ -124,7 +98,6 @@ export const ChatApi = async (props: PromptProps): Promise<Response> => {
       sentiment: ChatSentiment.Neutral,
       reason: "",
       fleschKincaidScore: fleschKincaidScore,
-      // name: APP_NAME || "Assistant",
       isPartial: isPartial,
     })
 
@@ -141,7 +114,7 @@ export const ChatApi = async (props: PromptProps): Promise<Response> => {
       }
 
       timer = setTimeout(async () => {
-        if (completed) return //just in case...
+        if (completed) return
         await UpsertChatMessage(createAssistantChatRecord(partialMessage.join(""), true))
       }, 1000)
     }
@@ -174,11 +147,10 @@ export const ChatApi = async (props: PromptProps): Promise<Response> => {
           id: addedMessage.response.id,
           role: addedMessage.response.role,
           content: addedMessage.response.content,
-          // name: addedMessage.response.name,
         })
 
-        updatedLastHumanMessage.content &&
-          (await UpdateChatThreadIfUncategorised(updatedThread, updatedLastHumanMessage.content))
+        addedMessage.response.content &&
+          (await UpdateChatThreadIfUncategorised(updatedThread, addedMessage.response.content))
       },
       async onFinal() {
         await data.close()
@@ -206,7 +178,7 @@ async function* makeContentFilterResponse(lockChatThread: boolean): AsyncGenerat
         delta: {
           content: lockChatThread
             ? "I'm sorry, but this chat is now locked after multiple safety concerns. We can't proceed with more messages. Please start a new chat."
-            : "I'm sorry I wasn't able to respond to that message, I am still learning how best to detect and prevent the generation of potentially harmful content. Could you try rephrasing, using different language or starting a new chat if this persists.",
+            : "I'm sorry I wasn't able to respond to that message, could you try rephrasing, using different language or starting a new chat if this persists.",
         },
         finish_reason: "stop",
         index: 0,
@@ -221,7 +193,7 @@ async function* makeContentFilterResponse(lockChatThread: boolean): AsyncGenerat
 
 async function getChatResponse(
   chatThread: ChatThreadModel,
-  systemPrompt: ChatCompletionMessageParam,
+  systemPrompt: ChatCompletionSystemMessageParam,
   userMessage: ChatCompletionMessageParam,
   history: ChatMessageModel[],
   addMessage: PromptMessage,
@@ -234,13 +206,18 @@ async function getChatResponse(
   let contentFilterTriggerCount = chatThread.contentFilterTriggerCount ?? 0
 
   try {
-    const openAI = OpenAIInstance({ contentSafetyOn: !["audio"].includes(chatThread.chatType) })
+    const openAI = OpenAIInstance({
+      contentSafetyOn: !["audio"].includes(chatThread.chatType),
+    })
+
+    const response = await openAI.chat.completions.create({
+      messages: [systemPrompt, ...mapOpenAIChatMessages(history), userMessage],
+      model: process.env.AZURE_OPENAI_API_DEPLOYMENT_NAME,
+      stream: true,
+    })
+
     return {
-      response: await openAI.chat.completions.create({
-        messages: [systemPrompt, ...mapOpenAIChatMessages(history), userMessage],
-        model: process.env.AZURE_OPENAI_API_DEPLOYMENT_NAME,
-        stream: true,
-      }),
+      response,
       updatedThread: chatThread,
     }
   } catch (exception) {
@@ -253,21 +230,22 @@ async function getChatResponse(
       id: addMessage.id,
       content: addMessage.content,
       role: addMessage.role,
-      name: APP_NAME || "Assistant",
       contentFilterResult,
       contentFilterTriggerCount,
     })
 
-    const upadatedThread = await UpsertChatThread({
+    const updatedThread = await UpsertChatThread({
       ...chatThread,
       contentFilterTriggerCount,
     })
-    if (upadatedThread.status !== "OK") throw upadatedThread.errors
+    if (updatedThread.status !== "OK") throw updatedThread.errors
 
     return {
       response: makeContentFilterResponse(contentFilterTriggerCount >= MAX_CONTENT_FILTER_TRIGGER_COUNT_ALLOWED),
       contentFilterResult,
-      updatedThread: upadatedThread.response,
+      updatedThread: updatedThread.response,
     }
+  } finally {
+    await data.close()
   }
 }

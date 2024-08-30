@@ -7,8 +7,14 @@ import { ServerActionResponseAsync } from "@/features/common/server-action-respo
 import { UserContainer } from "@/features/database/cosmos-containers"
 import { UserEntity } from "@/features/database/entities"
 import logger from "@/features/insights/app-insights"
-import { UserPreferences, UserRecord } from "@/features/models/user-models"
+import { UserPreferences, UserRecord, UserSettings } from "@/features/models/user-models"
 import { activityTrackingService } from "@/features/services/activity-tracking-service"
+
+import { GetUserApplication } from "./application-service"
+import { GetUserFeatures } from "./feature-service"
+import { GetUserIndexes } from "./index-service"
+import { GetUserSmartTools } from "./smart-tools-service"
+import { GetTenantById } from "./tenant-service"
 
 const toUserRecord = (entity: UserEntity): UserRecord => ({
   id: entity.id,
@@ -26,6 +32,8 @@ const toUserRecord = (entity: UserEntity): UserRecord => ({
   last_login: entity.last_login,
   failed_login_attempts: entity.failed_login_attempts,
   last_failed_login: entity.last_failed_login,
+  accepted_terms: entity.accepted_terms,
+  accepted_terms_date: entity.accepted_terms_date,
   last_version_seen: entity.last_version_seen,
 })
 
@@ -126,7 +134,7 @@ export const UpdateUser = async (
     await trackActivityUpdates(existingUser, update, updateTimestamp.toISOString())
 
     const container = await UserContainer()
-    const { resource } = await container.items.upsert<UserEntity>({ ...existingUser, ...request })
+    const { resource } = await container.items.upsert<UserEntity>({ ...update })
     if (!resource) {
       return {
         status: "ERROR",
@@ -242,7 +250,7 @@ export const GetUsersByTenantId = async (tenantId: string): ServerActionResponse
 /** @deprecated */
 export const GetUserById = async (tenantId: string, userId: string): ServerActionResponseAsync<UserEntity> => {
   const query = {
-    query: "SELECT * FROM c WHERE c.tenantId = @tenantId AND c.id = @userId",
+    query: "SELECT * FROM c WHERE c.tenantId = @tenantId AND (c.id = @userId OR c.upn = @userId)",
     parameters: [
       { name: "@tenantId", value: tenantId },
       { name: "@userId", value: userId },
@@ -254,7 +262,7 @@ export const GetUserById = async (tenantId: string, userId: string): ServerActio
     if (!resources?.[0])
       return {
         status: "NOT_FOUND",
-        errors: [{ message: `User with upn ${userId} not found` }],
+        errors: [{ message: `User with id ${userId} not found` }],
       }
     return {
       status: "OK",
@@ -302,5 +310,52 @@ async function trackActivityUpdates(oldUser: UserEntity, user: UserEntity, updat
     }
   } catch (err) {
     logger.error("Error tracking user activity updates", { error: err })
+  }
+}
+
+export const GetUserSettings = async (): ServerActionResponseAsync<UserSettings> => {
+  try {
+    const session = await userSession()
+    if (!session) return { status: "ERROR", errors: [{ message: "User not found" }] }
+
+    const [existingUserResult, existingTenantResult] = await Promise.all([
+      GetUserByUpn(session.tenantId, session.upn),
+      GetTenantById(session.tenantId),
+    ])
+    if (existingUserResult.status !== "OK") throw existingUserResult
+    if (existingTenantResult.status !== "OK") throw existingTenantResult
+    const user = existingUserResult.response
+    const tenant = existingTenantResult.response
+    const [applicationResult, smartToolsResult, featuresResult, indexesResult] = await Promise.all([
+      GetUserApplication(tenant.application),
+      GetUserSmartTools(tenant.smartTools, user.groups),
+      GetUserFeatures(tenant.features, user.groups),
+      GetUserIndexes(tenant.indexes, user.groups),
+    ])
+    if (applicationResult.status !== "OK") throw applicationResult
+    if (smartToolsResult.status !== "OK")
+      logger.warning(`Could not retrieve smart tools for user ${user.upn}`, { error: smartToolsResult.errors })
+    if (featuresResult.status !== "OK")
+      logger.warning(`Could not retrieve features for user ${user.upn}`, { error: featuresResult.errors })
+    if (indexesResult.status !== "OK")
+      logger.warning(`Could not retrieve indexes for user ${user.upn}`, { error: indexesResult.errors })
+
+    const response: UserSettings = {
+      application: applicationResult.response,
+      tenant: {
+        contextPrompt: tenant.preferences.contextPrompt,
+        customReferenceFields: tenant.preferences.customReferenceFields || [],
+      },
+      smartTools: smartToolsResult.status === "OK" ? smartToolsResult.response : [],
+      features: featuresResult.status === "OK" ? featuresResult.response : [],
+      indexes: indexesResult.status === "OK" ? indexesResult.response : [],
+    }
+
+    return { status: "OK", response }
+  } catch (e) {
+    return {
+      status: "ERROR",
+      errors: [{ message: `${e}` }],
+    }
   }
 }

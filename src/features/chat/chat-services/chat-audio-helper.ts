@@ -14,7 +14,6 @@ export const transcribeAudio = async (
   logger.warning("transcribing file using whisper")
 
   const AZURE_ML_MANAGED_ERROR_CODE = 424
-  // const AZURE_ML_TIMEOUT_ERROR_CODE = 408
   const file = formData.get("audio") as File
 
   const apiUrl = process.env.APIM_BASE + "/whisper"

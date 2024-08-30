@@ -4,15 +4,15 @@ import { useState, useEffect, useRef } from "react"
 
 import { APP_VERSION } from "@/app-global"
 
-import useOnScreen from "@/components/hooks/use-on-screen"
-import { MarkdownPlaceholder } from "@/components/markdown/markdown-placeholder"
-import Typography from "@/components/typography"
-
 import { showError, showSuccess } from "@/features/globals/global-message-store"
 import logger from "@/features/insights/app-insights"
 import { Button } from "@/features/ui/button"
 import { Dialog, DialogHeader, DialogContent, DialogFooter } from "@/features/ui/dialog"
 import { cn } from "@/lib/utils"
+
+import useOnScreen from "@/components/hooks/use-on-screen"
+import { MarkdownPlaceholder } from "@/components/markdown/markdown-placeholder"
+import Typography from "@/components/typography"
 
 type AgreeTermsAndConditionsProps = { onClose: () => void }
 export default function AgreeTermsAndConditions({ onClose }: AgreeTermsAndConditionsProps): JSX.Element {

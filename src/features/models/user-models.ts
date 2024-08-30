@@ -39,8 +39,37 @@ export interface UserRecord extends UserIdentity, UserActivity {
   history?: string[]
 }
 
-export interface UserConfig {
-  // smartTools: SmartTool[]
-  // features: Feature[]
-  // indexes: Index[]
+export interface UserSettings {
+  application: UserApplicationConfig
+  tenant: UserTenantConfig
+  smartTools: UserSmartToolConfig[]
+  features: UserFeatureConfig[]
+  indexes: UserIndexConfig[]
+}
+
+export interface UserApplicationConfig {
+  id: string
+  name: string
+  description: string
+  version: string
+  termsAndConditionsDate: string
+}
+export interface UserTenantConfig {
+  contextPrompt: string
+  customReferenceFields: { name: "internalReference"; pattern: RegExp; label: string }[]
+}
+export interface UserSmartToolConfig {
+  id: string
+  name: string
+  template: string
+}
+export interface UserFeatureConfig {
+  id: string
+  name: string
+  description: string
+}
+export interface UserIndexConfig {
+  id: string
+  name: string
+  description: string
 }

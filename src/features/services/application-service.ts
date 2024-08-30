@@ -1,10 +1,35 @@
-import { APP_DESCRIPTION, APP_NAME, APP_VERSION } from "@/app-global"
-
 import { ServerActionResponseAsync } from "@/features/common/server-action-response"
 import { ApplicationContainer } from "@/features/database/cosmos-containers"
-import { TenantEntity } from "@/features/database/entities"
+import { ApplicationEntity, TenantEntity } from "@/features/database/entities"
 import { ApplicationSettings } from "@/features/models/application-models"
 import { TenantApplicationConfig } from "@/features/models/tenant-models"
+import { UserApplicationConfig } from "@/features/models/user-models"
+
+export const GetApplications = async (): ServerActionResponseAsync<ApplicationSettings[]> => {
+  try {
+    const container = await ApplicationContainer()
+    const { resources } = await container.items
+      .query<ApplicationEntity>({ query: "SELECT * FROM c ORDER BY c.createdOn ASC" })
+      .fetchAll()
+    return {
+      status: "OK",
+      response: resources.length
+        ? resources.map(r => ({
+            id: r.applicationId,
+            name: r.name,
+            description: r.description,
+            version: r.version,
+            termsAndConditionsDate: r.termsAndConditionsDate,
+          }))
+        : [],
+    }
+  } catch (error) {
+    return {
+      status: "ERROR",
+      errors: [{ message: `${error}` }],
+    }
+  }
+}
 
 export const GetApplicationSettings = async (): ServerActionResponseAsync<ApplicationSettings> => {
   try {
@@ -14,25 +39,8 @@ export const GetApplicationSettings = async (): ServerActionResponseAsync<Applic
       parameters: [{ name: "@applicationId", value: process.env.APPLICATION_ID }],
     }
     const container = await ApplicationContainer()
-    const { resources } = await container.items.query<ApplicationSettings>(query).fetchAll()
-    if (!resources[0]) {
-      const { resource } = await container.items.upsert<ApplicationSettings>({
-        id: process.env.APPLICATION_ID,
-        name: APP_NAME,
-        description: APP_DESCRIPTION,
-        version: APP_VERSION,
-        termsAndConditionsDate: new Date().toISOString(),
-      })
-      if (!resource)
-        return {
-          status: "ERROR",
-          errors: [{ message: "Application settings not created" }],
-        }
-      return {
-        status: "OK",
-        response: resource,
-      }
-    }
+    const { resources } = await container.items.query<ApplicationEntity>(query).fetchAll()
+    if (!resources[0]) throw `Application not found with id: ${process.env.APPLICATION_ID}`
     return {
       status: "OK",
       response: resources[0],
@@ -51,7 +59,7 @@ export const GetTenantApplication = async (
   try {
     const container = await ApplicationContainer()
     const { resources } = await container.items
-      .query<TenantApplicationConfig>({
+      .query<ApplicationEntity>({
         query: "SELECT * FROM c WHERE c.applicationId = @applicationId",
         parameters: [{ name: "@applicationId", value: tenantApp.id }],
       })
@@ -75,31 +83,32 @@ export const GetTenantApplication = async (
   }
 }
 
-// async function isAdmin(user: User | AdapterUser): Promise<boolean> {
-//   try {
-//     const [appSettingsResponse, tenantResponse] = await Promise.all([
-//       GetApplicationSettings(),
-//       GetTenantDetails(user.tenantId),
-//     ])
-
-//     if (appSettingsResponse.status !== "OK") {
-//       return false
-//     }
-
-//     const appSettings: ApplicationSettings = appSettingsResponse.response
-
-//     const administratorAccess: TenantGroupPairs[] = appSettings.administratorAccess || []
-
-//     const tenantAccess = administratorAccess.find(access => access.tenant === user.tenantId)
-
-//     if (!tenantAccess) {
-//       return false
-//     }
-
-//     const isAdmin = tenantAccess.groups.some(group => user.groups?.includes(group))
-
-//     return isAdmin
-//   } catch (_error) {
-//     return false
-//   }
-// }
+export const GetUserApplication = async (
+  tenantApp: TenantEntity["application"]
+): ServerActionResponseAsync<UserApplicationConfig> => {
+  try {
+    const container = await ApplicationContainer()
+    const { resources } = await container.items
+      .query<ApplicationEntity>({
+        query: "SELECT * FROM c WHERE c.applicationId = @applicationId",
+        parameters: [{ name: "@applicationId", value: tenantApp.id }],
+      })
+      .fetchAll()
+    if (!resources.length) throw new Error(`Tenant application not found with id: ${tenantApp.id}`)
+    return {
+      status: "OK",
+      response: {
+        id: resources[0].applicationId,
+        name: resources[0].name,
+        description: resources[0].description,
+        version: resources[0].version,
+        termsAndConditionsDate: resources[0].termsAndConditionsDate,
+      },
+    }
+  } catch (e) {
+    return {
+      status: "ERROR",
+      errors: [{ message: `${e}` }],
+    }
+  }
+}

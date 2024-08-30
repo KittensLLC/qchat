@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import * as yup from "yup"
 
 import { userSession } from "@/features/auth/helpers"
-import { GetUserByUpn, UpdateUser } from "@/features/services/user-service"
+import { UpdateUser } from "@/features/services/user-service"
 
 const userUpdateSchema = yup
   .object({
-    upn: yup.string().required(),
+    userId: yup.string().required(),
     tenantId: yup.string().required(),
   })
   .noUnknown(true, "Attempted to update invalid fields")
@@ -15,22 +15,14 @@ export async function POST(_request: NextRequest, _response: NextResponse): Prom
   try {
     const user = await userSession()
     const validatedData = await userUpdateSchema.validate(
-      { upn: user?.upn, tenantId: user?.tenantId },
+      { userId: user?.userId, tenantId: user?.tenantId },
       { abortEarly: false, stripUnknown: true }
     )
-    const { upn, tenantId } = validatedData
+    const { userId, tenantId } = validatedData
 
-    const existingUserResult = await GetUserByUpn(tenantId, upn)
-    if (existingUserResult.status !== "OK") {
-      return new Response(JSON.stringify({ error: "User not found" }), { status: 404 })
-    }
-
-    const updatedUserResult = await UpdateUser(tenantId, existingUserResult.response.userId, {
-      accepted_terms: true,
-    })
-    if (updatedUserResult.status === "OK") {
+    const updatedUserResult = await UpdateUser(tenantId, userId, { accepted_terms: true })
+    if (updatedUserResult.status === "OK")
       return new Response(JSON.stringify(updatedUserResult.response), { status: 200 })
-    }
     return new Response(JSON.stringify({ error: "Failed to update T&Cs" }), { status: 400 })
   } catch (error) {
     const errorMessage = error instanceof yup.ValidationError ? { errors: error.errors } : "Internal Server Error"

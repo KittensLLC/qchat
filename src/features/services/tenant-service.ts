@@ -26,8 +26,9 @@ function mapToTenantEntity(entity: TenantEntity): TenantEntity {
   return {
     ...entity,
     application: {
-      ...entity.application,
       id: process.env.APPLICATION_ID,
+      enabled: entity.application?.enabled || true,
+      accessGroups: entity.application?.accessGroups || [],
     },
     smartTools: (entity.smartTools || []).map(st => ({
       id: st.id || st.name || "",

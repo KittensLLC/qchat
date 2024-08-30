@@ -3,6 +3,7 @@ import { FeatureContainer } from "@/features/database/cosmos-containers"
 import { FeatureEntity, TenantEntity } from "@/features/database/entities"
 import { FeatureModel } from "@/features/models/feature-models"
 import { TenantFeatureConfig } from "@/features/models/tenant-models"
+import { UserFeatureConfig } from "@/features/models/user-models"
 
 export const GetPublicFeatures = async (): ServerActionResponseAsync<FeatureModel[]> => {
   try {
@@ -14,7 +15,7 @@ export const GetPublicFeatures = async (): ServerActionResponseAsync<FeatureMode
       .fetchAll()
     return {
       status: "OK",
-      response: resources.length ? resources.map(publicFeatureMapper) : [],
+      response: resources.length ? resources.map(toFeatureModel) : [],
     }
   } catch (error) {
     return {
@@ -32,7 +33,7 @@ export const GetFeatures = async (): ServerActionResponseAsync<FeatureModel[]> =
       .fetchAll()
     return {
       status: "OK",
-      response: resources.length ? resources.map(publicFeatureMapper) : [],
+      response: resources.length ? resources.map(toFeatureModel) : [],
     }
   } catch (error) {
     return {
@@ -42,7 +43,7 @@ export const GetFeatures = async (): ServerActionResponseAsync<FeatureModel[]> =
   }
 }
 
-const publicFeatureMapper = (resource: FeatureEntity): FeatureModel => ({
+const toFeatureModel = (resource: FeatureEntity): FeatureModel => ({
   id: resource.featureId,
   name: resource.name,
   description: resource.description,
@@ -114,5 +115,25 @@ export const GetTenantFeatures = async (
       status: "ERROR",
       errors: [{ message: `${error}` }],
     }
+  }
+}
+
+export const GetUserFeatures = async (
+  tenantFeatures: TenantEntity["features"],
+  userGroups: string[]
+): ServerActionResponseAsync<UserFeatureConfig[]> => {
+  try {
+    const tenantFeaturesResult = await GetTenantFeatures(tenantFeatures)
+    if (tenantFeaturesResult.status !== "OK") throw tenantFeaturesResult
+    const userFeatures = tenantFeaturesResult.response
+      .filter(tf => tf.enabled && (!tf.accessGroups.length || tf.accessGroups.some(ag => userGroups.includes(ag))))
+      .map<UserFeatureConfig>(tf => ({
+        id: tf.featureId,
+        name: tf.name,
+        description: tf.description,
+      }))
+    return { status: "OK", response: userFeatures }
+  } catch (error) {
+    return { status: "ERROR", errors: [{ message: `${error}` }] }
   }
 }

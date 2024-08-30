@@ -1,11 +1,19 @@
 import { ServerActionResponseAsync } from "@/features/common/server-action-response"
 import {
+  ApplicationContainer,
   FeatureContainer,
   IndexContainer,
   SmartToolContainer,
   TenantContainer,
 } from "@/features/database/cosmos-containers"
-import { FeatureEntity, IndexEntity, SmartToolEntity, TenantEntity } from "@/features/database/entities"
+import {
+  ApplicationEntity,
+  FeatureEntity,
+  IndexEntity,
+  SmartToolEntity,
+  TenantEntity,
+} from "@/features/database/entities"
+import { ApplicationSettings } from "@/features/models/application-models"
 import { FeatureModel } from "@/features/models/feature-models"
 import { IndexModel } from "@/features/models/index-models"
 import { SmartToolModel } from "@/features/models/smart-tool-models"
@@ -191,6 +199,39 @@ export const DeleteIndex = async (indexId: string): ServerActionResponseAsync<vo
   }
 }
 
+export const UpdateApplication = async (
+  application: ApplicationSettings,
+  dispatchChange = false
+): ServerActionResponseAsync<void> => {
+  try {
+    const container = await ApplicationContainer()
+    const { resources } = await container.items
+      .query<ApplicationEntity>({
+        query: "SELECT * FROM c WHERE c.applicationId = @applicationId",
+        parameters: [{ name: "@applicationId", value: application.id }],
+      })
+      .fetchAll()
+
+    const timestamp = new Date().toISOString()
+    const updatedApplicaiton: ApplicationEntity = {
+      ...resources[0],
+      createdOn: resources[0]?.createdOn || timestamp,
+      updatedOn: timestamp,
+      applicationId: application.id,
+      name: application.name,
+      description: application.description,
+      termsAndConditionsDate: application.termsAndConditionsDate,
+      version: application.version,
+    }
+    await container.items.upsert<ApplicationEntity>(updatedApplicaiton)
+
+    if (dispatchChange) await updateTenantsWithApplication(application)
+    return { status: "OK", response: undefined }
+  } catch (error) {
+    return { status: "ERROR", errors: [{ message: `${error}` }] }
+  }
+}
+
 /**
  * if smart tool is public, update all tenants with this smart tool
  * @param smartTool
@@ -204,12 +245,12 @@ async function updateTenantsWithSmartTool(smartTool: SmartToolModel): Promise<vo
 
   for (const tenant of tenants) {
     if (!tenant.smartTools) tenant.smartTools = []
-    const existingTenantSmartTool = tenant.smartTools.find(tst => tst.id === smartTool.id)
+    const existingTenantSmartTool = tenant.smartTools.find(tst => tst.id === smartTool.id || tst.name === smartTool.id)
     if (!existingTenantSmartTool) {
       tenant.smartTools.push({
         id: smartTool.id,
         name: smartTool.name,
-        enabled: false,
+        enabled: smartTool.enabled,
         accessGroups: [],
         template: smartTool.template,
       })
@@ -261,7 +302,7 @@ async function updateTenantsWithFeature(feature: FeatureModel): Promise<void> {
     if (!existingTenantFeature) {
       tenant.features.push({
         id: feature.id,
-        enabled: false,
+        enabled: feature.enabled,
         accessGroups: [],
       })
     }
@@ -339,5 +380,25 @@ async function updateIndexStatusForTenants(index: IndexModel): Promise<void> {
       tenant.indexes = tenant.indexes.map(ti => (ti.id === index.id ? { ...ti, enabled: index.enabled } : ti))
       await tenantContainer.items.upsert<TenantEntity>(tenant)
     }
+  }
+}
+
+/**
+ * update all tenants with this application
+ * @param application
+ * @returns
+ */
+async function updateTenantsWithApplication(application: ApplicationSettings): Promise<void> {
+  const tenantContainer = await TenantContainer()
+  const query = { query: "SELECT * FROM c WHERE IS_NULL(c.dateOffBoarded) ORDER BY c.departmentName ASC" }
+  const { resources: tenants } = await tenantContainer.items.query<TenantEntity>(query).fetchAll()
+
+  for (const tenant of tenants) {
+    tenant.application = {
+      id: application.id,
+      enabled: true,
+      accessGroups: [],
+    }
+    await tenantContainer.items.upsert<TenantEntity>(tenant)
   }
 }

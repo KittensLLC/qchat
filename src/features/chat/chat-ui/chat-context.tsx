@@ -18,7 +18,7 @@ import {
   ChatDocumentModel,
 } from "@/features/chat/models"
 import { showError } from "@/features/globals/global-message-store"
-import { TenantPreferences } from "@/features/models/tenant-models"
+import { UserIndexConfig, UserSettings } from "@/features/models/user-models"
 import { uniqueId } from "@/lib/utils"
 
 import { FileState, useFileState } from "./chat-file/use-file-state"
@@ -42,6 +42,7 @@ const useChatHook = (props: ChatProviderProps): ChatContextState => {
     userId: props.chatThread.userId,
     internalReference: props.chatThread.internalReference,
     chatThreadName: props.chatThread.name,
+    indexId: props.chatThread.indexId,
   })
 
   const chatThreadNameRef = useRef(chatBody.chatThreadName)
@@ -84,9 +85,10 @@ const useChatHook = (props: ChatProviderProps): ChatContextState => {
     sendExtraMessageFields: true,
   })
 
-  const onChatTypeChange = (value: ChatType): void => {
+  const setChatType = (chatType: ChatType): void => {
     fileState.setIsFileNull(true)
-    setChatBody(prev => ({ ...prev, chatType: value }))
+    const index = getDefaultIndex(props.indexes, chatType)
+    setChatBody(prev => ({ ...prev, chatType: chatType, indexId: index?.id || "" }))
   }
 
   const onConversationStyleChange = (value: ConversationStyle): void =>
@@ -94,6 +96,8 @@ const useChatHook = (props: ChatProviderProps): ChatContextState => {
 
   const onConversationSensitivityChange = (value: ConversationSensitivity): void =>
     setChatBody(prev => ({ ...prev, conversationSensitivity: value }))
+
+  const onIndexChange = (value: string): void => setChatBody(prev => ({ ...prev, indexId: value }))
 
   const handleSubmit = async (
     event?: { preventDefault?: () => void },
@@ -131,23 +135,24 @@ const useChatHook = (props: ChatProviderProps): ChatContextState => {
     }),
     documents: props.documents,
     tenantPreferences: props.tenantPreferences,
+    appSettings: props.appSettings,
     chatThreadLocked: (props.chatThread?.contentFilterTriggerCount || 0) >= MAX_CONTENT_FILTER_TRIGGER_COUNT_ALLOWED,
     handleSubmit,
     setChatBody,
     chatBody,
-    onChatTypeChange,
+    setChatType,
     onConversationStyleChange,
     onConversationSensitivityChange,
+    onIndexChange,
     fileState,
     id: props.id,
+    features: props.features,
   }
 }
 
 export const useChatContext = (): ChatContextDefinition => {
   const context = useContext(ChatContext)
-  if (!context) {
-    throw new Error("ChatContext is null")
-  }
+  if (!context) throw new Error("ChatContext is null")
   return context
 }
 
@@ -156,7 +161,10 @@ type ChatProviderProps = {
   chats: Array<UserChatMessageModel | AssistantChatMessageModel>
   chatThread: ChatThreadModel
   documents: ChatDocumentModel[]
-  tenantPreferences?: TenantPreferences
+  tenantPreferences?: UserSettings["tenant"]
+  appSettings?: UserSettings["application"]
+  indexes: UserSettings["indexes"]
+  features: UserSettings["features"]
 }
 export default function ChatProvider({ children, ...rest }: PropsWithChildren<ChatProviderProps>): JSX.Element {
   const value = useChatHook(rest)
@@ -168,11 +176,25 @@ type ChatContextState = UseChatHelpers & {
   setChatBody: (body: PromptBody) => void
   chatBody: PromptBody
   fileState: FileState
-  onChatTypeChange: (value: ChatType) => void
+  setChatType: (value: ChatType) => void
   onConversationStyleChange: (value: ConversationStyle) => void
   onConversationSensitivityChange: (value: ConversationSensitivity) => void
+  onIndexChange: (value: string) => void
   chatThreadLocked: boolean
   messages: PromptMessage[]
   documents: ChatDocumentModel[]
-  tenantPreferences?: TenantPreferences
+  tenantPreferences?: UserSettings["tenant"]
+  appSettings?: UserSettings["application"]
+  features: UserSettings["features"]
+}
+function getDefaultIndex(indexes: UserIndexConfig[], value: ChatType): UserIndexConfig | undefined {
+  switch (value) {
+    case ChatType.Audio:
+      return indexes.find(i => i.id === process.env.NEXT_PUBLIC_DEFAULT_CHAT_AUDIO_INDEX_ID)
+    case ChatType.Data:
+      return indexes.find(i => i.id === process.env.NEXT_PUBLIC_DEFAULT_CHAT_DATA_INDEX_ID)
+    case ChatType.Simple:
+    default:
+      return undefined
+  }
 }

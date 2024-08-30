@@ -62,9 +62,9 @@ const configureIdentityProvider = (): Provider[] => {
           if (tenantAppResult.status !== "OK" || tenantResult.status !== "OK" || !user)
             throw new Error("Failed to retrieve tenant or user details")
 
-          const isAppAdmin = tenantAppResult.response.accessGroups.some(accessGroup =>
-            profile.groups.includes(accessGroup)
-          )
+          const isAppAdmin =
+            tenantAppResult.response.accessGroups.some(accessGroup => profile.groups.includes(accessGroup)) ||
+            !!(user.admin || user.qchatAdmin)
           const normalisedUserIdentifier = (profile.upn || profile.email || "")?.toLowerCase()
           const isTenantAdmin = tenantResult.response.administrators
             .map(admin => admin.toLowerCase())

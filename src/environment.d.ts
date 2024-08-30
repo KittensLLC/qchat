@@ -42,6 +42,8 @@ declare global {
       NEXT_TELEMETRY_DISABLED: string
       REGION_NAME: string
       USE_DEVICE_CREDENTIAL: string
+      NEXT_PUBLIC_DEFAULT_CHAT_AUDIO_INDEX_ID: string
+      NEXT_PUBLIC_DEFAULT_CHAT_DATA_INDEX_ID: string
     }
   }
 }
